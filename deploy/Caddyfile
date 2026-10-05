@@ -1,0 +1,26 @@
+# DOMAIN comes from .env, e.g. "mybot.duckdns.org" (automatic HTTPS)
+# or ":80" for plain HTTP on your own machine.
+{$DOMAIN::80} {
+	encode zstd gzip
+
+	@backend path /api/* /webhooks/*
+	handle @backend {
+		reverse_proxy api:8000
+	}
+
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+
+	@assets path /assets/*
+	header @assets Cache-Control "public, max-age=31536000, immutable"
+
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+}
