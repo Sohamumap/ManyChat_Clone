@@ -173,7 +173,8 @@ async def handle_comment(ctx: EngineContext, event: CommentEvent) -> None:
 
 async def _touch_inbound(ctx: EngineContext, contact: Contact, created: bool) -> None:
     contact.last_inbound_at = now()
-    if created or not contact.username:
+    # Messaging us grants consent to read their profile; load it until it has succeeded once
+    if created or not contact.username or contact.follower_checked_at is None:
         try:
             await refresh_profile(ctx, contact)
         except Exception as exc:  # profile is nice-to-have; never block the flow

@@ -226,7 +226,7 @@ async def test_collect_email(ctx, session, account, fake_ig):
     contact = await session.scalar(select(Contact))
     assert contact.email == "jane@example.com"
     assert contact.tags == ["lead"]
-    assert fake_ig.texts()[-1] == "Thanks jane! Sent to jane@example.com"
+    assert fake_ig.texts()[-1] == "Thanks Test! Sent to jane@example.com"
     assert (await run_for(session, automation.id)).status == "completed"
 
 
