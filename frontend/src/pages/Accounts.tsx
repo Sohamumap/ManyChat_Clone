@@ -61,8 +61,9 @@ export default function AccountsPage() {
         )}
 
         <AccountList />
-        <ConnectCard config={config.data} configLoading={config.loading} />
         <WebhookSetup config={config.data} error={config.error} loading={config.loading} onRetry={() => void config.reload()} />
+        <InstagramAppCard onSaved={() => void config.reload()} />
+        <ConnectCard config={config.data} configLoading={config.loading} />
         <ChangePassword />
       </div>
     </div>
@@ -330,8 +331,8 @@ function ConnectCard({ config, configLoading }: { config?: AppConfig; configLoad
             <p className="mt-3 flex items-start gap-1.5 text-xs text-amber-700">
               <CircleAlert className="mt-px size-3.5 shrink-0" />
               <span>
-                The Instagram app isn't configured on the server yet. Add your Meta app's Instagram app ID and secret to the
-                backend configuration and restart it, or paste an access token instead.
+                Add your Instagram app ID and secret in the “Instagram app” card above first, or paste an access token
+                instead.
               </span>
             </p>
           )}
@@ -390,7 +391,8 @@ function WebhookSetup({
           <ErrorNotice error={error ?? 'Unavailable'} onRetry={onRetry} />
         ) : (
           <>
-            <CopyField label="Webhook callback URL" value={config.webhook_url} hint="Subscribe to the comments and messages fields." />
+            <CopyField label="Webhook callback URL" value={config.webhook_url} hint="Subscribe to the comments, messages and messaging_postbacks fields." />
+            <CopyField label="Webhook verify token" value={config.webhook_verify_token} hint="Paste it into the “Verify token” box next to the callback URL." />
             <CopyField label="OAuth redirect URI" value={config.oauth_redirect_uri} hint="Add it under Business login settings → OAuth redirect URIs." />
             <div className="flex items-center gap-2 text-xs">
               {config.instagram_app_configured ? (
@@ -399,12 +401,129 @@ function WebhookSetup({
                 </Badge>
               ) : (
                 <Badge tone="amber" dot>
-                  Instagram app not configured on the server
+                  Instagram app ID and secret not added yet
                 </Badge>
               )}
               <span className="truncate text-slate-400">{config.public_base_url}</span>
             </div>
           </>
+        )}
+      </CardBody>
+    </Card>
+  )
+}
+
+// ------------------------------------------------------------------ instagram app keys
+
+function InstagramAppCard({ onSaved }: { onSaved: () => void }) {
+  const toast = useToast()
+  const current = useAsync(() => api.settings.instagramApp(), [])
+  const [appId, setAppId] = useState<string | null>(null)
+  const [appSecret, setAppSecret] = useState('')
+  const [metaSecret, setMetaSecret] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  const data = current.data
+  const appIdValue = appId ?? data?.instagram_app_id ?? ''
+  const dirty = (appId !== null && appId !== data?.instagram_app_id) || appSecret !== '' || metaSecret !== ''
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault()
+    setError(null)
+    setSaving(true)
+    try {
+      await api.settings.updateInstagramApp({
+        instagram_app_id: appId === null ? null : appId.trim(),
+        instagram_app_secret: appSecret.trim() || null,
+        meta_app_secret: metaSecret.trim() || null,
+      })
+      setAppId(null)
+      setAppSecret('')
+      setMetaSecret('')
+      await current.reload()
+      onSaved()
+      toast.success('Instagram app saved')
+    } catch (err) {
+      setError(errorMessage(err))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const secretHint = (isSet: boolean | undefined) =>
+    isSet ? 'Saved. Leave empty to keep it, or paste a new one to replace it.' : undefined
+
+  return (
+    <Card>
+      <CardHeader
+        icon={<KeyRound className="size-4" />}
+        title="Instagram app"
+        description="From Meta App Dashboard → Instagram → API setup with Instagram login."
+        actions={
+          data &&
+          (data.configured ? (
+            <Badge tone="green" dot>
+              Configured
+            </Badge>
+          ) : (
+            <Badge tone="amber" dot>
+              Not configured
+            </Badge>
+          ))
+        }
+      />
+      <CardBody>
+        {current.loading ? (
+          <LoadingBlock className="py-6" />
+        ) : current.error ? (
+          <ErrorNotice error={current.error} onRetry={() => void current.reload()} />
+        ) : (
+          <form onSubmit={submit} className="grid max-w-xl gap-4">
+            {error && <Notice tone="error">{error}</Notice>}
+            <Field label="Instagram app ID" htmlFor="ig-app-id" hint="Digits only, e.g. 1234567890123456">
+              <input
+                id="ig-app-id"
+                inputMode="numeric"
+                autoComplete="off"
+                value={appIdValue}
+                onChange={(e) => setAppId(e.target.value)}
+                className="input font-mono"
+              />
+            </Field>
+            <Field label="Instagram app secret" htmlFor="ig-app-secret" hint={secretHint(data?.instagram_app_secret_set)}>
+              <input
+                id="ig-app-secret"
+                type="password"
+                autoComplete="off"
+                placeholder={data?.instagram_app_secret_set ? '••••••••••••' : ''}
+                value={appSecret}
+                onChange={(e) => setAppSecret(e.target.value)}
+                className="input font-mono"
+              />
+            </Field>
+            <Field
+              label="Meta app secret"
+              htmlFor="meta-app-secret"
+              optional
+              hint={secretHint(data?.meta_app_secret_set) ?? 'App settings → Basic → App secret. Helps verify webhooks.'}
+            >
+              <input
+                id="meta-app-secret"
+                type="password"
+                autoComplete="off"
+                placeholder={data?.meta_app_secret_set ? '••••••••••••' : ''}
+                value={metaSecret}
+                onChange={(e) => setMetaSecret(e.target.value)}
+                className="input font-mono"
+              />
+            </Field>
+            <div>
+              <Button type="submit" variant="primary" loading={saving} disabled={!dirty}>
+                Save
+              </Button>
+            </div>
+          </form>
         )}
       </CardBody>
     </Card>

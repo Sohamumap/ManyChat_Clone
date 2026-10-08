@@ -17,7 +17,7 @@ Your exact URLs are also shown in the dashboard under **Settings → Webhook set
 | What | Value |
 |---|---|
 | Webhook callback URL | `https://<your-domain>/webhooks/instagram` |
-| Webhook verify token | the `WEBHOOK_VERIFY_TOKEN` from your `.env` |
+| Webhook verify token | shown in **Settings → Webhook setup** (copy button) |
 | OAuth redirect URI | `https://<your-domain>/api/instagram/oauth/callback` |
 
 ---
@@ -32,19 +32,18 @@ Your exact URLs are also shown in the dashboard under **Settings → Webhook set
 3. Open the app → **Use cases → Manage messaging & content on Instagram → Customize →
    API setup with Instagram login**. The steps below all happen on that page.
 
-## 2. Copy the Instagram app ID and secret into `.env`
+## 2. Paste the Instagram app ID and secret into FlowDM
 
 On *API setup with Instagram login*, the top of the page shows **Instagram app ID** and
-**Instagram app secret**. These are *not* the same as the Meta App ID on the dashboard home.
+**Instagram app secret** (click *Show*). These are *not* the same as the Meta App ID on the
+dashboard home.
 
-```bash
-INSTAGRAM_APP_ID=1234567890
-INSTAGRAM_APP_SECRET=abcdef...
-# Optional but recommended: App settings → Basic → App secret
-META_APP_SECRET=...
-```
+In FlowDM open **Settings → Instagram app**, paste both, and click **Save**. Optionally also
+paste the **Meta app secret** (Meta dashboard: *App settings → Basic → App secret*), which helps
+verify webhooks. They're stored encrypted. No restart is needed.
 
-Restart to apply: `docker compose up -d`.
+<sub>Alternatively you can put them in the server's `.env` as `INSTAGRAM_APP_ID`,
+`INSTAGRAM_APP_SECRET`, `META_APP_SECRET`. Values saved in the dashboard take precedence.</sub>
 
 ## 3. Add your Instagram account as a tester
 
@@ -61,7 +60,7 @@ While the app is in **Development** mode, only accounts with a role on the app c
 In section **"Configure webhooks"**:
 
 1. **Callback URL**: `https://<your-domain>/webhooks/instagram`
-2. **Verify token**: your `WEBHOOK_VERIFY_TOKEN`
+2. **Verify token**: copy it from FlowDM **Settings → Webhook setup**
 3. Click **Verify and save**. FlowDM answers Meta's check automatically. If it fails, make sure
    `https://<your-domain>/api/health` opens in your browser and the token matches exactly.
 4. In the field list, **Subscribe** to: `comments`, `messages`, `messaging_postbacks`.

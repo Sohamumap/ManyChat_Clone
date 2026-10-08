@@ -24,11 +24,23 @@ with `credentials: "include"` / same-origin requests). Errors are JSON
 {
   "public_base_url": "https://mybot.duckdns.org",
   "webhook_url": "https://mybot.duckdns.org/webhooks/instagram",
+  "webhook_verify_token": "3f9c0a1b2c3d4e5f",
   "oauth_redirect_uri": "https://mybot.duckdns.org/api/instagram/oauth/callback",
   "instagram_app_configured": true,
   "graph_api_version": "v26.0"
 }
 ```
+
+## Instagram app credentials
+
+Editable in the dashboard; values saved here take precedence over `.env`. Secrets are write-only.
+
+| Method | Path | Body | Returns |
+|---|---|---|---|
+| GET | `/api/settings/instagram` | – | `InstagramApp` |
+| PUT | `/api/settings/instagram` | `{instagram_app_id?, instagram_app_secret?, meta_app_secret?}` (omit/null = keep, `""` = clear) | `InstagramApp` |
+
+`InstagramApp = {instagram_app_id: string, instagram_app_secret_set: bool, meta_app_secret_set: bool, configured: bool}`
 
 ## Instagram accounts
 

@@ -218,9 +218,9 @@ function SetupChecklist({
       title: 'Instagram app configured',
       description: configError
         ? `Couldn't check: ${configError}`
-        : 'Add your Meta app’s Instagram app ID and secret to the server configuration.',
+        : 'Paste your Meta app’s Instagram app ID and secret in Settings.',
       to: '/accounts',
-      cta: 'Setup info',
+      cta: 'Add keys',
     },
     {
       done: accountsCount > 0,

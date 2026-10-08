@@ -234,3 +234,53 @@ async def test_token_refresh_schedule(account, session, monkeypatch):
     assert calls == ["token"]
     await session.refresh(account)
     assert account.token_expires_at > datetime.now(UTC) + timedelta(days=59)
+
+
+async def test_instagram_app_settings_from_dashboard(authed):
+    # Falls back to .env (tests set INSTAGRAM_APP_SECRET but no app id)
+    initial = (await authed.get("/api/settings/instagram")).json()
+    assert initial == {
+        "instagram_app_id": "",
+        "instagram_app_secret_set": True,
+        "meta_app_secret_set": False,
+        "configured": False,
+    }
+    config = (await authed.get("/api/config")).json()
+    assert config["webhook_verify_token"] == "verify-me"
+    assert config["instagram_app_configured"] is False
+    assert (await authed.get("/api/instagram/oauth/start")).status_code == 400
+
+    bad = await authed.put("/api/settings/instagram", json={"instagram_app_id": "abc"})
+    assert bad.status_code == 422
+    assert "digits only" in json.dumps(bad.json())
+
+    saved = await authed.put(
+        "/api/settings/instagram",
+        json={"instagram_app_id": "1234567890", "instagram_app_secret": "NewSecret0123456789abcd"},
+    )
+    assert saved.json()["configured"] is True
+    start = (await authed.get("/api/instagram/oauth/start")).json()
+    assert "client_id=1234567890" in start["url"]
+
+    # Webhooks are now verified with the dashboard secret, not the .env one
+    body = {"object": "instagram", "entry": []}
+    raw = json.dumps(body).encode()
+    new_sig = "sha256=" + hmac.new(b"NewSecret0123456789abcd", raw, hashlib.sha256).hexdigest()
+    ok = await authed.post(
+        "/webhooks/instagram", content=raw, headers={"X-Hub-Signature-256": new_sig}
+    )
+    assert ok.status_code == 200
+    _, old_headers = signed(body)
+    old = await authed.post("/webhooks/instagram", content=raw, headers=old_headers)
+    assert old.status_code == 403
+
+    # Clearing the dashboard value falls back to .env again; the app id is untouched
+    cleared = await authed.put("/api/settings/instagram", json={"instagram_app_secret": ""})
+    assert cleared.json()["instagram_app_id"] == "1234567890"
+    again = await authed.post("/webhooks/instagram", content=raw, headers=old_headers)
+    assert again.status_code == 200
+
+
+async def test_settings_require_login(client):
+    assert (await client.get("/api/settings/instagram")).status_code == 401
+    assert (await client.put("/api/settings/instagram", json={})).status_code == 401

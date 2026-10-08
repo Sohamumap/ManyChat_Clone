@@ -4,6 +4,7 @@ import logging
 from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 
 from app.api.deps import SessionDep
+from app.app_settings import load_instagram_config
 from app.config import get_settings
 from app.jobs.queue import enqueue
 from app.models import WebhookEvent
@@ -27,9 +28,8 @@ async def verify_subscription(
 @router.post("/instagram")
 async def receive(request: Request, session: SessionDep) -> Response:
     body = await request.body()
-    settings = get_settings()
     signature = request.headers.get("X-Hub-Signature-256")
-    secrets = [s for s in (settings.instagram_app_secret, settings.meta_app_secret) if s]
+    secrets = (await load_instagram_config(session)).webhook_secrets
     if not any(verify_webhook_signature(body, signature, secret) for secret in secrets):
         log.warning("Rejected webhook with invalid signature")
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Invalid signature")

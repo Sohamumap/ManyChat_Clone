@@ -12,9 +12,25 @@ export interface User {
 export interface AppConfig {
   public_base_url: string
   webhook_url: string
+  webhook_verify_token: string
   oauth_redirect_uri: string
   instagram_app_configured: boolean
   graph_api_version: string
+}
+
+/** Meta app credentials; secrets are write-only (the API only says whether they're set). */
+export interface InstagramAppSettings {
+  instagram_app_id: string
+  instagram_app_secret_set: boolean
+  meta_app_secret_set: boolean
+  configured: boolean
+}
+
+/** Omit/null = keep, "" = clear (fall back to the server's .env). */
+export interface InstagramAppSettingsIn {
+  instagram_app_id?: string | null
+  instagram_app_secret?: string | null
+  meta_app_secret?: string | null
 }
 
 // ------------------------------------------------------------------ accounts

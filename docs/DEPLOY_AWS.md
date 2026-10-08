@@ -1,136 +1,144 @@
-# Deploying to AWS EC2 (free tier) with a free DuckDNS domain
+# Putting FlowDM on AWS (runs 24/7)
 
-This puts FlowDM on one small Ubuntu server: Postgres, the API, the background worker, and Caddy
-(which serves the dashboard and gets a free HTTPS certificate automatically). Everything runs in
-Docker, so the server needs very little setup. Expect about 30 minutes.
+You'll create **one small server** in AWS and paste a setup script into it. The server then
+installs everything by itself: Docker, the database, the app, and a free HTTPS certificate.
+**No terminal or SSH is needed.**
 
-**Cost:** new AWS accounts get free-tier usage or credits. Check *Billing → Free Tier* in the
-console for what your account has. Without them, a `t3.micro` costs about **$8/month**, plus
-about $1.60/month for 20 GB of disk and about $3.60/month for the public IPv4 address. A
-`t4g.micro` (ARM) is a bit cheaper and works too; all images are multi-architecture. The
-whole stack uses about **250 MB of RAM**, so 1 GB is plenty.
+Time needed: about 20 minutes (most of it is waiting).
 
----
+| Part | What | Time |
+|---|---|---|
+| 1 | Get a free web address from DuckDNS | 3 min |
+| 2 | Launch the server in AWS (Mumbai region) with the setup script | 7 min |
+| 3 | Wait for it to install itself, then log in | 10 min |
 
-## 1. Launch the server
-
-AWS Console → **EC2 → Launch instance**:
-
-| Setting | Value |
-|---|---|
-| Name | `flowdm` |
-| OS image | **Ubuntu Server 24.04 LTS** (64-bit x86; or Arm for t4g) |
-| Instance type | **t3.micro** (free-tier eligible) or t4g.micro |
-| Key pair | Create one and download the `.pem` file. You need it to log in. |
-| Network → Security group | Create one that allows: **SSH (22) from My IP**, **HTTP (80) from Anywhere**, **HTTPS (443) from Anywhere** |
-| Storage | **20 GiB gp3** (free tier covers up to 30 GiB) |
-
-Click **Launch instance**.
-
-## 2. Give it a fixed IP address
-
-EC2 → **Elastic IPs → Allocate Elastic IP address → Allocate**, then select it →
-**Actions → Associate** → choose your `flowdm` instance. Note the IP (e.g. `3.110.12.34`).
-
-Without this, the IP changes every time the instance stops. (If you skip it, use
-`deploy/duckdns-update.sh` from cron to keep DuckDNS updated.)
-
-## 3. Get a free domain from DuckDNS
-
-1. Go to <https://www.duckdns.org> and sign in (GitHub/Google).
-2. Add a subdomain, e.g. `mybrandbot` → you get **`mybrandbot.duckdns.org`**.
-3. Put your Elastic IP in its *current ip* box → **update ip**.
-4. Copy the **token** shown at the top (only needed for the optional auto-update script).
-
-Check it resolves: `ping mybrandbot.duckdns.org` should show your Elastic IP.
-
-## 4. Prepare the server
-
-```bash
-chmod 400 ~/Downloads/flowdm.pem
-ssh -i ~/Downloads/flowdm.pem ubuntu@mybrandbot.duckdns.org
-```
-
-On the server:
-
-```bash
-# Get the code. For a private repo, use a GitHub personal access token (Settings → Developer
-# settings → Fine-grained tokens, read-only "Contents" on this repo):
-git clone https://<YOUR_GITHUB_TOKEN>@github.com/Sohamumap/ManyChat_Clone.git flowdm
-cd flowdm
-
-# Swap space, Docker, automatic security updates
-sudo ./deploy/setup-ec2.sh
-exit   # log out and back in so you can use docker without sudo
-```
-
-## 5. Configure
-
-```bash
-ssh -i ~/Downloads/flowdm.pem ubuntu@mybrandbot.duckdns.org
-cd flowdm
-./deploy/init-env.sh mybrandbot.duckdns.org you@example.com
-```
-
-This creates `.env` with random secrets and **prints your dashboard password. Save it.**
-Then add your Instagram app credentials (see [META_SETUP.md](META_SETUP.md), step 2):
-
-```bash
-nano .env   # set INSTAGRAM_APP_ID, INSTAGRAM_APP_SECRET (and META_APP_SECRET)
-```
-
-## 6. Start it
-
-```bash
-docker compose up -d --build
-```
-
-The first build takes about 5–10 minutes on a t3.micro (later updates are faster). Then:
-
-```bash
-docker compose ps                 # all services "running" / "healthy"
-docker compose logs -f web        # watch Caddy obtain the HTTPS certificate
-```
-
-Open **https://mybrandbot.duckdns.org** and log in with the email and password from step 5.
-Change the password under **Settings**.
-
-Then follow **[META_SETUP.md](META_SETUP.md)** to connect Instagram.
+**Cost:** new AWS accounts get free credits (currently up to $200 for the first 6 months) that
+cover this server. After that, a `t3.micro` in Mumbai costs roughly **$13–14/month** in total
+(server about $8, 20 GB disk about $2, public IP address about $3.60). The app itself uses about
+200 MB of the server's 1 GB of memory.
 
 ---
 
-## Day-to-day operations
+## Part 1: Free web address (DuckDNS)
 
-| Task | Command (run inside `~/flowdm`) |
+Instagram can only send events to an `https://` address, so the server needs a name.
+
+1. Go to **<https://www.duckdns.org>** and sign in (Google, GitHub, etc.).
+2. In **sub domain**, type a name, e.g. `mybrandbot`, and click **add domain**.
+   Your address is now **`mybrandbot.duckdns.org`**. Leave the IP as it is; the server
+   fills it in itself.
+3. At the top of the page, copy your **token** (looks like
+   `a1b2c3d4-1234-5678-9abc-def012345678`).
+
+Keep the name and token for Part 2.
+
+## Part 2: Launch the server
+
+1. Sign in to the **AWS Console**: <https://console.aws.amazon.com>
+2. **Region** (top-right, next to your name): choose **Asia Pacific (Mumbai) ap-south-1**.
+3. In the search bar type **EC2** → open it → **Launch instance** (orange button).
+4. Fill in the form from top to bottom:
+
+   | Section | What to choose |
+   |---|---|
+   | **Name and tags** | `flowdm` |
+   | **Application and OS Images** | **Ubuntu** → *Ubuntu Server 24.04 LTS (HVM), SSD Volume Type*, architecture **64-bit (x86)** |
+   | **Instance type** | **t3.micro** (shows "Free tier eligible") |
+   | **Key pair (login)** | **Proceed without a key pair**. You don't need one; the browser-based "EC2 Instance Connect" works without it. |
+   | **Network settings** | Keep "Create security group" and tick all three: **Allow SSH traffic from Anywhere**, **Allow HTTPS traffic from the internet**, **Allow HTTP traffic from the internet** |
+   | **Configure storage** | **20** GiB, **gp3** |
+
+   *SSH is only used if you ever open the browser terminal (EC2 Instance Connect). Ubuntu
+   only accepts short-lived keys, never passwords.*
+
+5. Open **Advanced details** (at the bottom), scroll all the way down to **User data**.
+6. Open [`deploy/aws-user-data.sh`](../deploy/aws-user-data.sh) on GitHub, click **Copy raw file**,
+   and paste it into the User data box. Then edit the four lines near the top:
+
+   ```bash
+   DUCKDNS_SUBDOMAIN="mybrandbot"                          # your name from Part 1, without .duckdns.org
+   DUCKDNS_TOKEN="a1b2c3d4-1234-5678-9abc-def012345678"    # your token from Part 1
+   ADMIN_EMAIL="you@gmail.com"                             # your dashboard login
+   ADMIN_PASSWORD="SomethingStrong123"                     # 8+ characters, no quotes or $
+   ```
+
+7. Click **Launch instance** (right side). Then **View all instances**.
+
+## Part 3: Wait, then log in
+
+The server now installs itself. That takes **about 10 minutes**.
+
+* **To watch progress:** select the instance → **Actions → Monitor and troubleshoot → Get system
+  log**. Lines starting with `FlowDM:` show each step. The last one says
+  `FlowDM: DONE. Open https://mybrandbot.duckdns.org ...`
+  The log only refreshes every few minutes, so be patient.
+* Then open **https://mybrandbot.duckdns.org** (your name) and log in with the email and password
+  you put in the script. **Change the password** in Settings afterwards.
+
+If the log shows `FlowDM: SETUP FAILED: ...`, it says what to fix (usually a typo in the
+DuckDNS name or token). Terminate the instance (**Instance state → Terminate**) and launch a new
+one with the corrected script.
+
+**Next:** connect Instagram by following [META_SETUP.md](META_SETUP.md). You paste the Meta
+app's ID and secret into **Settings → Instagram app** in the dashboard; no server files needed.
+
+---
+
+## It runs 24/7
+
+* The app restarts itself after crashes and server reboots.
+* If the instance is stopped and started, AWS gives it a new IP address. The server updates
+  DuckDNS every 5 minutes, so the address keeps working. (An Elastic IP isn't needed.)
+* The database is backed up every night to `/opt/flowdm/backups` (last 14 days kept).
+* Ubuntu installs security updates automatically.
+* Instagram access tokens are renewed automatically by the app.
+
+## Updating to a newer version
+
+When new code is pushed to GitHub:
+
+1. EC2 → select the instance → **Connect** → **EC2 Instance Connect** → **Connect**.
+   A terminal opens in your browser.
+2. Run:
+
+   ```bash
+   sudo /opt/flowdm/deploy/update.sh
+   ```
+
+   It downloads the new code, rebuilds, restarts, and updates the database automatically.
+
+## Useful commands (in the EC2 Instance Connect browser terminal)
+
+| What | Command |
 |---|---|
-| See what's running | `docker compose ps` |
-| Live logs | `docker compose logs -f worker` (or `api`, `web`, `db`) |
-| Update to the latest code | `./deploy/update.sh` (pulls, rebuilds, restarts; migrations run automatically) |
-| Restart everything | `docker compose restart` |
-| Stop | `docker compose down` (data is kept in Docker volumes) |
-| Back up the database | `./deploy/backup.sh` → `backups/*.sql.gz` |
-| Edit settings | `nano .env` then `docker compose up -d` |
-
-**Automatic daily backups:** run `crontab -e` and add:
-
-```
-15 3 * * * /home/ubuntu/flowdm/deploy/backup.sh >/dev/null 2>&1
-```
-
-For off-server copies, sync `backups/` to S3 (`aws s3 sync backups s3://your-bucket/flowdm`)
-or download them occasionally with `scp`.
+| Is everything running? | `cd /opt/flowdm && sudo docker compose ps` |
+| Live logs of the worker | `cd /opt/flowdm && sudo docker compose logs -f worker` (Ctrl+C to stop) |
+| Restart everything | `cd /opt/flowdm && sudo docker compose restart` |
+| Back up now | `sudo /opt/flowdm/deploy/backup.sh` |
+| Setup log | `sudo cat /var/log/cloud-init-output.log` |
 
 ## Troubleshooting
 
-* **Site doesn't load / certificate errors**: check that `DOMAIN` in `.env` matches your DuckDNS
-  name exactly, the DuckDNS IP equals the Elastic IP, and ports 80/443 are open in the
-  security group. `docker compose logs web` shows Caddy's certificate attempts.
-* **Meta says the callback URL couldn't be validated**: open
-  `https://<domain>/api/health` in a browser (it must show `{"ok":true}`), and make sure the
-  verify token matches `WEBHOOK_VERIFY_TOKEN` in `.env`.
-* **Comments don't trigger anything**: open **Activity → Webhook log**. If nothing arrives,
-  the webhook isn't subscribed (Settings → *Subscribe webhooks*) or the commenter isn't an
-  Instagram tester while the app is in Development mode (see META_SETUP.md §8). If events
-  arrive but nothing is sent, the Comments and Flow runs tabs show the reason.
-* **Out of memory while building**: make sure swap is on (`free -h` should show 2 GB swap).
-  `setup-ec2.sh` adds it.
+* **The site doesn't open after 15 minutes**: check *Get system log* for `FlowDM:` lines.
+  Make sure the security group allows HTTP (80) and HTTPS (443) from anywhere.
+* **Browser says the certificate is invalid**: wait a few more minutes. Caddy requests the
+  free certificate as soon as DuckDNS points at the server. Check the DuckDNS page shows the
+  instance's *Public IPv4 address*.
+* **Meta can't verify the webhook URL**: open `https://<your-name>.duckdns.org/api/health` in
+  a browser; it must show `{"ok":true}`. Copy the verify token from **Settings → Webhook setup**.
+* **Comments don't trigger anything**: see **Activity → Webhook log** in the dashboard, and
+  [META_SETUP.md §8](META_SETUP.md#8-going-live-so-anyone-not-just-testers-triggers-your-automations).
+
+---
+
+## Manual setup (alternative, for people comfortable with SSH)
+
+Launch the same instance *without* User data, then on the server:
+
+```bash
+git clone https://github.com/Sohamumap/ManyChat_Clone.git flowdm && cd flowdm
+sudo ./deploy/setup-ec2.sh                 # swap, Docker, security updates; then log out and in
+./deploy/init-env.sh mybrandbot.duckdns.org you@example.com   # prints your dashboard password
+nano .env                                   # optional: DUCKDNS_TOKEN for automatic IP updates
+docker compose up -d --build
+```

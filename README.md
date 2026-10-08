@@ -51,7 +51,9 @@ own Meta app.
 
 ## Getting started
 
-1. **Deploy**: [docs/DEPLOY_AWS.md](docs/DEPLOY_AWS.md) (EC2 free tier + free DuckDNS domain + HTTPS).
+1. **Deploy**: [docs/DEPLOY_AWS.md](docs/DEPLOY_AWS.md). Launch one EC2 instance and paste
+   [`deploy/aws-user-data.sh`](deploy/aws-user-data.sh) as its *User data*; it installs itself
+   (free DuckDNS domain + HTTPS), with no terminal needed.
 2. **Connect Instagram**: [docs/META_SETUP.md](docs/META_SETUP.md) (Meta app, webhooks, testers,
    going live).
 3. **Run locally / develop**: [docs/LOCAL_DEV.md](docs/LOCAL_DEV.md).

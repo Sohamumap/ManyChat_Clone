@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import func, select, text
 
 from app.api import accounts, activity, auth, automations, contacts, webhooks
+from app.api import settings as settings_api
 from app.config import get_settings
 from app.db import SessionLocal
 from app.models import User
@@ -47,7 +48,7 @@ def create_app() -> FastAPI:
         openapi_url=None if settings.is_production else "/api/openapi.json",
         redoc_url=None,
     )
-    for module in (auth, accounts, automations, contacts, activity, webhooks):
+    for module in (auth, accounts, automations, contacts, activity, settings_api, webhooks):
         app.include_router(module.router)
 
     @app.get("/api/health", tags=["health"])

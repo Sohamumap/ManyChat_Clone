@@ -129,11 +129,11 @@ class InstagramClient:
 # -- OAuth (Instagram Business Login) ---------------------------------------
 
 
-def build_authorize_url(state: str) -> str:
+def build_authorize_url(state: str, app_id: str) -> str:
     settings = get_settings()
     query = urlencode(
         {
-            "client_id": settings.instagram_app_id,
+            "client_id": app_id,
             "redirect_uri": settings.oauth_redirect_uri,
             "response_type": "code",
             "scope": OAUTH_SCOPES,
@@ -145,15 +145,15 @@ def build_authorize_url(state: str) -> str:
     return f"https://www.instagram.com/oauth/authorize?{query}"
 
 
-async def exchange_code_for_token(code: str) -> dict:
+async def exchange_code_for_token(code: str, app_id: str, app_secret: str) -> dict:
     """Returns {"access_token": short-lived token, "user_id": ..., "permissions": ...}."""
     settings = get_settings()
     async with httpx.AsyncClient(timeout=_TIMEOUT) as http:
         response = await http.post(
             "https://api.instagram.com/oauth/access_token",
             data={
-                "client_id": settings.instagram_app_id,
-                "client_secret": settings.instagram_app_secret,
+                "client_id": app_id,
+                "client_secret": app_secret,
                 "grant_type": "authorization_code",
                 "redirect_uri": settings.oauth_redirect_uri,
                 "code": code.removesuffix("#_"),
@@ -166,7 +166,7 @@ async def exchange_code_for_token(code: str) -> dict:
     return data
 
 
-async def exchange_for_long_lived_token(short_token: str) -> dict:
+async def exchange_for_long_lived_token(short_token: str, app_secret: str) -> dict:
     """Returns {"access_token", "token_type", "expires_in"} (~60 days)."""
     settings = get_settings()
     async with httpx.AsyncClient(timeout=_TIMEOUT) as http:
@@ -174,7 +174,7 @@ async def exchange_for_long_lived_token(short_token: str) -> dict:
             f"{settings.graph_base_url}/access_token",
             params={
                 "grant_type": "ig_exchange_token",
-                "client_secret": settings.instagram_app_secret,
+                "client_secret": app_secret,
                 "access_token": short_token,
             },
         )

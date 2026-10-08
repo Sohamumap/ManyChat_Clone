@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from app.api.deps import SessionDep, UserDep, get_account_or_404
-from app.config import get_settings
+from app.app_settings import load_instagram_config
 from app.instagram import client as ig
 from app.models import IGAccount
 from app.schemas import AccountOut
@@ -74,21 +74,6 @@ async def _save_account(session: SessionDep, token: str, expires_in: int | None)
     return account
 
 
-@router.get("/api/config")
-async def config(_: UserDep) -> dict[str, Any]:
-    settings = get_settings()
-    base = settings.public_base_url.rstrip("/")
-    return {
-        "public_base_url": base,
-        "webhook_url": f"{base}/webhooks/instagram",
-        "oauth_redirect_uri": settings.oauth_redirect_uri,
-        "instagram_app_configured": bool(
-            settings.instagram_app_id and settings.instagram_app_secret
-        ),
-        "graph_api_version": settings.graph_api_version,
-    }
-
-
 @router.get("/api/accounts", response_model=list[AccountOut])
 async def list_accounts(_: UserDep, session: SessionDep) -> list[IGAccount]:
     return list(await session.scalars(select(IGAccount).order_by(IGAccount.id)))
@@ -103,14 +88,14 @@ async def connect_with_token(body: TokenIn, _: UserDep, session: SessionDep) -> 
 
 
 @router.get("/api/instagram/oauth/start")
-async def oauth_start(_: UserDep) -> dict[str, str]:
-    settings = get_settings()
-    if not (settings.instagram_app_id and settings.instagram_app_secret):
+async def oauth_start(_: UserDep, session: SessionDep) -> dict[str, str]:
+    app = await load_instagram_config(session)
+    if not app.configured:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            "Set INSTAGRAM_APP_ID and INSTAGRAM_APP_SECRET in .env first",
+            "Add your Instagram app ID and secret in Settings first",
         )
-    return {"url": ig.build_authorize_url(create_state_token("instagram-oauth"))}
+    return {"url": ig.build_authorize_url(create_state_token("instagram-oauth"), app.app_id)}
 
 
 @router.get("/api/instagram/oauth/callback")
@@ -125,8 +110,9 @@ async def oauth_callback(
     if not state or not verify_state_token(state, "instagram-oauth"):
         return _accounts_redirect(error="Login expired, please try again")
     try:
-        short = await ig.exchange_code_for_token(code)
-        long = await ig.exchange_for_long_lived_token(short["access_token"])
+        app = await load_instagram_config(session)
+        short = await ig.exchange_code_for_token(code, app.app_id, app.app_secret)
+        long = await ig.exchange_for_long_lived_token(short["access_token"], app.app_secret)
         await _save_account(session, long["access_token"], int(long.get("expires_in") or 0))
     except (ig.InstagramAPIError, KeyError, HTTPException) as exc:
         log.warning("Instagram OAuth failed: %s", exc)
